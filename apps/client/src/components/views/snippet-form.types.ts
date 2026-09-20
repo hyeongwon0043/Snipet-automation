@@ -18,6 +18,8 @@ export interface FeedbackProgressHandlers {
 export interface SnippetFormProps {
   initialContent?: string;
   onSave?: (content: string) => Promise<void>;
+  onAutoSave?: (content: string) => Promise<void>;
+  isDraft?: boolean;
   readOnly?: boolean;
   onOrganize?: (
     content: string,

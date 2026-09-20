@@ -13,6 +13,7 @@ type Params = {
 
 type PageDataResponse = {
   snippet?: Record<string, unknown> | null;
+  draft?: Record<string, unknown> | null;
   read_only?: boolean;
   prev_id?: number | null;
   next_id?: number | null;
@@ -36,6 +37,7 @@ export async function loadSnippetPageData({ kind, idParam, keyParam, client }: P
 
   const response = await client.get<PageDataResponse>(`${endpoint}${query}`);
   const snippet = response?.snippet ?? null;
+  const draft = response?.draft ?? null;
   const snippetEditable = snippet?.editable;
 
   const readOnly =
@@ -47,6 +49,7 @@ export async function loadSnippetPageData({ kind, idParam, keyParam, client }: P
 
   return {
     snippet,
+    draft,
     readOnly,
     prevId: typeof response?.prev_id === 'number' ? response.prev_id : null,
     nextId: typeof response?.next_id === 'number' ? response.next_id : null,

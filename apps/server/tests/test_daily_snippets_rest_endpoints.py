@@ -371,10 +371,15 @@ def test_daily_create_success(monkeypatch):
         assert content == "new content"
         return created
 
+    async def fake_delete_daily_snippet_draft(db, user_id, snippet_date):
+        assert user_id == viewer.id
+        assert snippet_date == created.date
+
     monkeypatch.setattr(snippet_utils, "get_snippet_viewer_or_401", fake_get_viewer)
     monkeypatch.setattr(snippet_utils, "get_request_now", lambda _req: datetime(2026, 2, 27, 14, 0, tzinfo=timezone.utc))
     monkeypatch.setattr(daily_snippets, "current_business_key", lambda kind, now: date(2026, 2, 27))
     monkeypatch.setattr(crud, "upsert_daily_snippet", fake_upsert_daily_snippet)
+    monkeypatch.setattr(crud, "delete_daily_snippet_draft", fake_delete_daily_snippet_draft)
 
     result = asyncio.run(inspect.unwrap(daily_snippets.create_daily_snippet)(request=_make_request("/daily-snippets", "POST"),
             payload=schemas.DailySnippetCreate(content="new content"))
@@ -382,6 +387,63 @@ def test_daily_create_success(monkeypatch):
 
     assert result.id == 400
     assert result.content == "new content"
+
+
+def test_daily_page_data_returns_private_draft_when_no_snippet(monkeypatch):
+    viewer = SimpleNamespace(id=5)
+    draft = SimpleNamespace(content="private draft", date=date(2026, 2, 27))
+
+    async def fake_get_viewer(request_arg, db):
+        return viewer
+
+    async def fake_build_page_data(**_kwargs):
+        return {"snippet": None, "read_only": False, "prev_id": None, "next_id": None}
+
+    async def fake_get_draft(db, user_id, snippet_date):
+        assert user_id == viewer.id
+        assert snippet_date == date(2026, 2, 27)
+        return draft
+
+    monkeypatch.setattr(snippet_utils, "get_snippet_viewer_or_401", fake_get_viewer)
+    monkeypatch.setattr(snippet_utils, "get_request_now", lambda _req: datetime(2026, 2, 27, 14, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(daily_snippets, "current_business_key", lambda kind, now: date(2026, 2, 27))
+    monkeypatch.setattr(daily_snippets._flow, "build_snippet_page_data_response", fake_build_page_data)
+    monkeypatch.setattr(crud, "get_daily_snippet_draft_by_user_and_date", fake_get_draft)
+
+    result = asyncio.run(inspect.unwrap(daily_snippets.get_daily_snippet_page_data)(
+        request=_make_request("/daily-snippets/page-data", "GET"), id=None, date=None
+    ))
+
+    assert result["snippet"] is None
+    assert result["draft"] is draft
+
+
+def test_daily_draft_create_never_overwrites_existing_draft(monkeypatch):
+    viewer = SimpleNamespace(id=5)
+
+    async def fake_get_viewer(request_arg, db):
+        return viewer
+
+    async def fake_get_snippet(db, user_id, snippet_date):
+        return None
+
+    async def fake_get_draft(db, user_id, snippet_date):
+        return SimpleNamespace(content="student edit")
+
+    monkeypatch.setattr(snippet_utils, "get_snippet_viewer_or_401", fake_get_viewer)
+    monkeypatch.setattr(snippet_utils, "get_request_now", lambda _req: datetime(2026, 2, 27, 14, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(daily_snippets, "current_business_key", lambda kind, now: date(2026, 2, 27))
+    monkeypatch.setattr(crud, "get_daily_snippet_by_user_and_date", fake_get_snippet)
+    monkeypatch.setattr(crud, "get_daily_snippet_draft_by_user_and_date", fake_get_draft)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(inspect.unwrap(daily_snippets.create_daily_snippet_draft)(
+            request=_make_request("/daily-snippets/draft", "POST"),
+            payload=schemas.DailySnippetDraftWrite(content="automation draft"),
+        ))
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Daily snippet draft already exists"
 
 
 def test_daily_update_not_editable_returns_403(monkeypatch):

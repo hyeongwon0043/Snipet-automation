@@ -1,0 +1,30 @@
+name: Create daily snippet draft from Notion
+
+on:
+  # 21:00 Asia/Seoul (12:00 UTC). GitHub may delay scheduled runs slightly.
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create private daily draft
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
+          GCS_API_TOKEN: ${{ secrets.GCS_API_TOKEN }}
+          GCS_API_URL: https://api.1000.school
+        run: python apps/server/scripts/sync_notion_daily_draft.py

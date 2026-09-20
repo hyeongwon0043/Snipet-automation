@@ -38,6 +38,7 @@ class User(Base):
     team = relationship("Team", back_populates="members")
     team_histories = relationship("UserTeamHistory", back_populates="user")
     daily_snippets = relationship("DailySnippet", back_populates="user")
+    daily_snippet_drafts = relationship("DailySnippetDraft", back_populates="user")
     weekly_snippets = relationship("WeeklySnippet", back_populates="user")
     api_tokens = relationship("ApiToken", back_populates="user")
     comments = relationship("Comment", back_populates="user")
@@ -352,6 +353,30 @@ class DailySnippet(Base):
     comments = relationship("Comment", back_populates="daily_snippet")
 
     __table_args__ = (UniqueConstraint("user_id", "date", name="_user_date_uc"),)
+
+
+class DailySnippetDraft(Base):
+    """A private, editable precursor to a daily snippet.
+
+    Drafts deliberately live outside ``daily_snippets`` so an automated import
+    cannot appear in the team feed or affect achievements before its author has
+    reviewed it and explicitly saved the final snippet.
+    """
+
+    __tablename__ = "daily_snippet_drafts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="daily_snippet_drafts")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="_daily_draft_user_date_uc"),
+    )
 
 
 class WeeklySnippet(Base):

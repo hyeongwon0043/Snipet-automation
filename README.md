@@ -92,6 +92,11 @@ PYTHONPATH=. python -m uvicorn app.main:app --reload
 npm --workspace apps/client run dev
 ```
 
+## Notion 일간 초안 자동화
+
+Notion의 그날 기록을 개인 전용 일간 스니펫 초안으로 가져오는 GitHub Actions 설정은
+[`doc/notion-daily-draft.md`](./doc/notion-daily-draft.md)를 참고하세요.
+
 ## MCP 빠른 안내 (HTTP)
 
 GCS Pulse MCP는 streamable HTTP 엔드포인트를 사용합니다.

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
 from app.dependencies import has_snippet_full_read_role, has_snippet_team_read_role
-from app.models import Comment, DailySnippet, User, UserTeamHistory, WeeklySnippet
+from app.models import Comment, DailySnippet, DailySnippetDraft, User, UserTeamHistory, WeeklySnippet
 
 
 async def _count(db: AsyncSession, stmt) -> int:
@@ -111,6 +111,59 @@ async def update_daily_snippet(
 async def delete_daily_snippet(db: AsyncSession, snippet: DailySnippet) -> None:
     await db.delete(snippet)
     await db.commit()
+
+
+async def get_daily_snippet_draft_by_user_and_date(
+    db: AsyncSession,
+    user_id: int,
+    snippet_date: date,
+) -> Optional[DailySnippetDraft]:
+    result = await db.execute(
+        select(DailySnippetDraft).filter(
+            DailySnippetDraft.user_id == user_id,
+            DailySnippetDraft.date == snippet_date,
+        )
+    )
+    return result.scalars().first()
+
+
+async def create_daily_snippet_draft(
+    db: AsyncSession,
+    user_id: int,
+    snippet_date: date,
+    content: str,
+) -> DailySnippetDraft:
+    draft = DailySnippetDraft(user_id=user_id, date=snippet_date, content=content)
+    db.add(draft)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
+
+
+async def upsert_daily_snippet_draft(
+    db: AsyncSession,
+    user_id: int,
+    snippet_date: date,
+    content: str,
+) -> DailySnippetDraft:
+    existing = await get_daily_snippet_draft_by_user_and_date(db, user_id, snippet_date)
+    if existing:
+        existing.content = content
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+    return await create_daily_snippet_draft(db, user_id, snippet_date, content)
+
+
+async def delete_daily_snippet_draft(
+    db: AsyncSession,
+    user_id: int,
+    snippet_date: date,
+) -> None:
+    draft = await get_daily_snippet_draft_by_user_and_date(db, user_id, snippet_date)
+    if draft:
+        await db.delete(draft)
+        await db.commit()
 
 
 async def list_daily_snippets(

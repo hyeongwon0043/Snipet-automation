@@ -38,6 +38,8 @@ type SnippetFormValues = z.infer<typeof snippetSchema>;
 export default function SnippetForm({
   initialContent = "",
   onSave,
+  onAutoSave,
+  isDraft = false,
   readOnly = false,
   onOrganize,
   onGenerateFeedback,
@@ -51,8 +53,8 @@ export default function SnippetForm({
   const latestContentRef = useRef(initialContent);
   const savedContentRef = useRef(initialContent);
   const saveInFlightRef = useRef(false);
-  const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
+  const onAutoSaveRef = useRef(onAutoSave ?? onSave);
+  onAutoSaveRef.current = onAutoSave ?? onSave;
 
   const persistedFeedback = React.useMemo(() => parseFeedback(rawFeedback), [rawFeedback]);
   const previewFeedback = React.useMemo(
@@ -117,7 +119,7 @@ export default function SnippetForm({
     const content = latestContentRef.current;
     if (
       readOnly ||
-      !onSaveRef.current ||
+      !onAutoSaveRef.current ||
       !content.trim() ||
       content === savedContentRef.current ||
       saveInFlightRef.current
@@ -128,7 +130,7 @@ export default function SnippetForm({
     saveInFlightRef.current = true;
     setAutoSaveState('saving');
     try {
-      await onSaveRef.current(content);
+      await onAutoSaveRef.current(content);
       savedContentRef.current = content;
       setAutoSaveState('saved');
     } catch (error) {
@@ -140,17 +142,17 @@ export default function SnippetForm({
   }, [readOnly]);
 
   useEffect(() => {
-    if (readOnly || !onSave || !currentContent.trim() || currentContent === savedContentRef.current) return;
+    if (readOnly || !(onAutoSave ?? onSave) || !currentContent.trim() || currentContent === savedContentRef.current) return;
     setAutoSaveState('pending');
     const timer = window.setTimeout(() => void saveAutomatically(), 10_000);
     return () => window.clearTimeout(timer);
-  }, [currentContent, onSave, readOnly, saveAutomatically]);
+  }, [currentContent, onAutoSave, onSave, readOnly, saveAutomatically]);
 
   useEffect(() => {
-    if (readOnly || !onSave) return;
+    if (readOnly || !(onAutoSave ?? onSave)) return;
     const interval = window.setInterval(() => void saveAutomatically(), 60_000);
     return () => window.clearInterval(interval);
-  }, [onSave, readOnly, saveAutomatically]);
+  }, [onAutoSave, onSave, readOnly, saveAutomatically]);
 
   const discardOrganizedDraft = () => {
     dispatch({ type: "CLOSE_ORGANIZE_DRAFT" });
@@ -162,7 +164,7 @@ export default function SnippetForm({
       return;
     }
 
-    if (data.content === initialContent) {
+    if (data.content === initialContent && !isDraft) {
       dispatch({ type: "SET_SUBMIT_ERROR", payload: null });
       toast("변경된 내용이 없습니다.");
       return;
@@ -199,7 +201,7 @@ export default function SnippetForm({
     handleCancelOrganizeDraft,
   } = useSnippetFormAiActions({
     readOnly,
-    onSave,
+    onSave: onAutoSave ?? onSave,
     onOrganize,
     onGenerateFeedback,
     hasOrganizedDraft,
@@ -230,8 +232,8 @@ export default function SnippetForm({
         <p className={cn('text-xs text-muted-foreground', autoSaveState === 'error' && 'text-destructive')} role="status">
           {autoSaveState === 'pending' && '자동 저장 대기 중'}
           {autoSaveState === 'saving' && '자동 저장 중…'}
-          {autoSaveState === 'saved' && '자동 저장됨'}
-          {autoSaveState === 'error' && '자동 저장에 실패했습니다. 저장 버튼으로 다시 시도해주세요.'}
+          {autoSaveState === 'saved' && (isDraft ? '초안 자동 저장됨' : '자동 저장됨')}
+          {autoSaveState === 'error' && (isDraft ? '초안 자동 저장에 실패했습니다. 잠시 후 다시 시도해주세요.' : '자동 저장에 실패했습니다. 저장 버튼으로 다시 시도해주세요.')}
         </p>
       )}
 

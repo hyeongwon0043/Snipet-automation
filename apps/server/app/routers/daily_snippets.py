@@ -12,6 +12,8 @@ from app.database import AsyncSessionLocal
 from app.lib.leaderboards_cache import get_leaderboards_cache
 from app.schemas import (
     DailySnippetCreate,
+    DailySnippetDraftResponse,
+    DailySnippetDraftWrite,
     DailySnippetFeedbackResponse,
     DailySnippetListResponse,
     DailySnippetOrganizeRequest,
@@ -60,7 +62,8 @@ async def get_daily_snippet_page_data(
             raise HTTPException(status_code=400, detail="Invalid date parameter") from exc
 
     async with AsyncSessionLocal() as db:
-        return await _flow.build_snippet_page_data_response(
+        viewer = await snippet_utils.get_snippet_viewer_or_401(request, db)
+        page_data = await _flow.build_snippet_page_data_response(
             request=request,
             db=db,
             snippet_id=id,
@@ -77,6 +80,21 @@ async def get_daily_snippet_page_data(
             list_from_key_name="from_date",
             list_to_key_name="to_date",
         )
+
+        # Drafts are private and only apply to an explicitly selected/current
+        # date with no saved snippet.  A historical or shared snippet URL must
+        # never expose another user's draft.
+        if id is None and page_data.get("snippet") is None:
+            draft_date = requested_key or current_business_key(
+                "daily", snippet_utils.get_request_now(request)
+            )
+            page_data["draft"] = await crud.get_daily_snippet_draft_by_user_and_date(
+                db,
+                viewer.id,
+                draft_date,
+            )
+
+        return page_data
 
 
 @router.get("/professor/page-data", response_model=DailySnippetPageDataResponse)
@@ -257,6 +275,7 @@ async def create_daily_snippet(
     payload: DailySnippetCreate,
 ):
     async with AsyncSessionLocal() as db:
+        viewer = await snippet_utils.get_snippet_viewer_or_401(request, db)
         result = await _flow.create_snippet_for_current_key(
             request=request,
             db=db,
@@ -268,11 +287,69 @@ async def create_daily_snippet(
             current_business_key=current_business_key,
             upsert_snippet=crud.upsert_daily_snippet,
         )
+        await crud.delete_daily_snippet_draft(
+            db,
+            user_id=viewer.id,
+            snippet_date=result.date,
+        )
 
     leaderboards_cache = get_leaderboards_cache(request)
     if leaderboards_cache:
         await leaderboards_cache.invalidate_all()
     return result
+
+
+@router.post("/draft", response_model=DailySnippetDraftResponse, status_code=201)
+@limiter.limit(SNIPPET_WRITE_RATE_LIMIT)
+async def create_daily_snippet_draft(
+    request: Request,
+    payload: DailySnippetDraftWrite,
+):
+    """Create an automation draft without replacing the author's work.
+
+    This endpoint is intentionally create-only.  A scheduled source importer
+    can retry safely, but can never overwrite a draft that the student has
+    begun editing.
+    """
+    async with AsyncSessionLocal() as db:
+        viewer = await snippet_utils.get_snippet_viewer_or_401(request, db)
+        now = snippet_utils.get_request_now(request)
+        snippet_date = current_business_key("daily", now)
+
+        if await crud.get_daily_snippet_by_user_and_date(db, viewer.id, snippet_date):
+            raise HTTPException(status_code=409, detail="Daily snippet is already saved")
+        if await crud.get_daily_snippet_draft_by_user_and_date(db, viewer.id, snippet_date):
+            raise HTTPException(status_code=409, detail="Daily snippet draft already exists")
+
+        return await crud.create_daily_snippet_draft(
+            db,
+            user_id=viewer.id,
+            snippet_date=snippet_date,
+            content=payload.content,
+        )
+
+
+@router.put("/draft", response_model=DailySnippetDraftResponse)
+@limiter.limit(SNIPPET_WRITE_RATE_LIMIT)
+async def upsert_daily_snippet_draft(
+    request: Request,
+    payload: DailySnippetDraftWrite,
+):
+    """Save the current user's private, editable draft for today."""
+    async with AsyncSessionLocal() as db:
+        viewer = await snippet_utils.get_snippet_viewer_or_401(request, db)
+        now = snippet_utils.get_request_now(request)
+        snippet_date = current_business_key("daily", now)
+
+        if await crud.get_daily_snippet_by_user_and_date(db, viewer.id, snippet_date):
+            raise HTTPException(status_code=409, detail="Daily snippet is already saved")
+
+        return await crud.upsert_daily_snippet_draft(
+            db,
+            user_id=viewer.id,
+            snippet_date=snippet_date,
+            content=payload.content,
+        )
 
 
 @router.post("/organize", response_model=DailySnippetOrganizeResponse)

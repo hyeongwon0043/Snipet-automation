@@ -567,6 +567,41 @@ async def migrate_and_seed():
             print(f"  - Skipping daily_snippets.feedback migration: {e}")
 
         try:
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS daily_snippet_drafts ("
+                    "id SERIAL PRIMARY KEY, "
+                    "user_id INTEGER NOT NULL REFERENCES users(id), "
+                    "date DATE NOT NULL, "
+                    "content TEXT NOT NULL, "
+                    "created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_snippet_drafts_user_date "
+                    "ON daily_snippet_drafts(user_id, date)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_daily_snippet_drafts_user_id "
+                    "ON daily_snippet_drafts(user_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_daily_snippet_drafts_date "
+                    "ON daily_snippet_drafts(date)"
+                )
+            )
+            print("  - daily_snippet_drafts table ensured.")
+        except Exception as e:
+            print(f"  - Skipping daily_snippet_drafts migration: {e}")
+
+        try:
             await conn.execute(text("ALTER TABLE weekly_snippets ADD COLUMN IF NOT EXISTS playbook TEXT"))
         except Exception as e:
             print(f"  - Skipping weekly_snippets.playbook migration: {e}")

@@ -336,6 +336,22 @@ class DailySnippetCreate(BaseModel):
 class DailySnippetUpdate(BaseModel):
     content: str
 
+
+class DailySnippetDraftWrite(BaseModel):
+    content: str
+
+
+class DailySnippetDraftResponse(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DailySnippetResponse(BaseModel):
     id: int
     user_id: int
@@ -374,6 +390,7 @@ class DailySnippetListResponse(BaseModel):
 
 class DailySnippetPageDataResponse(BaseModel):
     snippet: Optional[DailySnippetResponse] = None
+    draft: Optional[DailySnippetDraftResponse] = None
     read_only: bool
     prev_id: Optional[int] = None
     next_id: Optional[int] = None

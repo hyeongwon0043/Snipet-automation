@@ -76,6 +76,7 @@ export function SnippetPageClient({
 
   const { user, isAuthenticated, isLoading } = useAuth();
   const [snippet, setSnippet] = React.useState<any>(null);
+  const [draft, setDraft] = React.useState<any>(null);
   const hasAccess = hasPrivilegedRole(user?.roles);
   const [loading, setLoading] = React.useState(true);
   const [organizing, setOrganizing] = React.useState(false);
@@ -126,6 +127,7 @@ export function SnippetPageClient({
       });
 
       setSnippet(result.snippet);
+      setDraft(result.draft);
       setReadOnly(result.readOnly);
       setPrevId(result.prevId);
       setNextId(result.nextId);
@@ -154,6 +156,11 @@ export function SnippetPageClient({
       await api.post(basePath, { content }, { headers: requestHeaders });
     }
     await loadSnippet(true);
+  };
+
+  const handleDraftSave = async (content: string) => {
+    const savedDraft = await api.put('/daily-snippets/draft', { content }, { headers: requestHeaders });
+    setDraft(savedDraft);
   };
 
   const { handleOrganize, handleGenerateFeedback } = useSnippetStreamingActions({
@@ -234,7 +241,7 @@ export function SnippetPageClient({
       <main className="max-w-7xl mx-auto px-6 py-8">
         <PageHeader
           title={`${pageText.titleLabel} : ${selectedKey}`}
-          description={snippet ? pageText.descriptionWhenLoaded : pageText.descriptionWhenEmpty}
+          description={snippet || draft ? pageText.descriptionWhenLoaded : pageText.descriptionWhenEmpty}
           actions={
             <>
               <Input
@@ -285,8 +292,10 @@ export function SnippetPageClient({
           <TabsContent value="my" className="mt-0">
             <div className="w-full glass-card border-[var(--sys-current-border)] p-6 rounded-xl animate-entrance">
               <SnippetForm
-                initialContent={snippet?.content || ''}
+                initialContent={snippet?.content ?? draft?.content ?? ''}
                 onSave={handleSave}
+                onAutoSave={kind === 'daily' && !snippet?.id ? handleDraftSave : handleSave}
+                isDraft={kind === 'daily' && !snippet?.id && Boolean(draft)}
                 readOnly={readOnly}
                 onOrganize={handleOrganize}
                 onGenerateFeedback={handleGenerateFeedback}
