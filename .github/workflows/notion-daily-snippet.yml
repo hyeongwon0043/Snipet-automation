@@ -1,0 +1,35 @@
+name: Submit daily snippet from Notion
+
+on:
+  schedule:
+    # 21:00 Asia/Seoul (12:00 UTC)
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notion-daily-snippet-${{ github.repository_owner }}
+  cancel-in-progress: false
+
+jobs:
+  submit-snippet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Submit daily snippet
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID: 3e14513c-7397-80e4-b023-cca15f5ad306
+          GCS_API_TOKEN: ${{ secrets.GCS_API_TOKEN }}
+          GCS_API_URL: https://api.1000.school
+        run: python apps/server/scripts/sync_notion_daily_snippet.py
